@@ -100,7 +100,7 @@
                     Akses Diberikan <i data-lucide="sparkles" class="text-yellow-400 w-6 h-6"></i>
                 </h3>
                 <p class="text-emerald-400 text-lg font-medium">Data kunjungan Anda telah terenkripsi & tersimpan.</p>
-                <p class="text-slate-500 mt-6 text-sm">Mengalihkan ke dashboard...</p>
+                <p class="text-slate-500 mt-6 text-sm">Sistem mereset formulir...</p>
             </div>
 
             <!-- Formulir Presensi -->
@@ -211,11 +211,16 @@
 
                     <div class="relative">
                         <i data-lucide="search" class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 w-4 h-4"></i>
-                        <input type="text" id="searchInput" placeholder="Cari nama..." onkeyup="handleSearch()" class="pl-9 pr-4 py-2 rounded-xl bg-slate-950 border border-slate-800 text-white focus:ring-2 focus:ring-indigo-500/50 outline-none w-40 sm:w-48 text-sm">
+                        <input type="text" id="searchInput" placeholder="Cari nama..." onkeyup="handleSearch()" class="pl-9 pr-4 py-2 rounded-xl bg-slate-950 border border-slate-800 text-white focus:ring-2 focus:ring-indigo-500/50 outline-none w-32 sm:w-40 text-sm">
                     </div>
 
-                    <button onclick="toggleQRModal(true)" class="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 text-white px-5 py-2.5 rounded-xl font-bold text-sm transition-all border border-slate-700 hover:border-slate-600">
-                        <i data-lucide="qr-code" class="text-indigo-400 w-4 h-4"></i> Cetak QR Akses
+                    <!-- Tombol Sinkronisasi Baru -->
+                    <button onclick="fetchVisitorsFromCloud()" class="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2.5 rounded-xl font-bold text-sm transition-all border border-indigo-500">
+                        <i data-lucide="refresh-cw" class="w-4 h-4" id="sync-icon"></i> <span class="hidden md:inline">Sinkronisasi</span>
+                    </button>
+
+                    <button onclick="toggleQRModal(true)" class="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 text-white px-4 py-2.5 rounded-xl font-bold text-sm transition-all border border-slate-700 hover:border-slate-600">
+                        <i data-lucide="qr-code" class="text-indigo-400 w-4 h-4"></i> <span class="hidden md:inline">Cetak QR</span>
                     </button>
                 </div>
             </div>
@@ -227,7 +232,7 @@
                         <i data-lucide="users" class="text-indigo-400 w-7 h-7"></i>
                     </div>
                     <div>
-                        <p class="text-slate-400 text-xs font-bold uppercase tracking-widest mb-1">Total Pengguna Hari Ini</p>
+                        <p class="text-slate-400 text-xs font-bold uppercase tracking-widest mb-1">Total Pengguna</p>
                         <p class="text-3xl font-black text-white" id="stat-total">0</p>
                     </div>
                 </div>
@@ -289,7 +294,6 @@
     <!-- Script Logika Aplikasi -->
     <script>
         // --- KONFIGURASI ---
-        // URL GAS TERBARU TELAH DIMASUKKAN DI SINI
         const GAS_URL = "https://script.google.com/macros/s/AKfycbwwx9MZl-HJiOyp_mZ4L1qsieeWoFU491bp8UEl8UwcPpykQBohHSdU_D3Jtef2sDwRig/exec";
         
         const labsConfig = [
@@ -304,19 +308,14 @@
         let searchTerm = '';
         let isSubmitting = false;
         
-        // Data Dummy (Bisa ditambah/dikurang sesuai kebutuhan)
-        let visitors = [
-            { id: 1, name: "Ahmad Fauzi", class: "XII RPL 1", purpose: "Praktikum Mandiri", date: new Date().toISOString().split('T')[0], time: "08:15", status: "Aktif", computerNo: "05", labId: "Lab 1" },
-            { id: 2, name: "Siti Aminah", class: "XI TKJ 2", purpose: "Tugas Mapel", date: new Date().toISOString().split('T')[0], time: "09:30", status: "Aktif", computerNo: "12", labId: "Lab 2" },
-        ];
+        // Data diubah menjadi kosong untuk membuktikan aplikasi bisa menarik data dari cloud
+        let visitors = [];
 
         // --- INISIALISASI AWAL ---
         document.addEventListener('DOMContentLoaded', () => {
-            // Cek parameter URL dari hasil scan QR Code
             const urlParams = new URLSearchParams(window.location.search);
             const labFromUrl = urlParams.get('lab');
             
-            // Jika link diakses dari QR code dan membawa parameter yang valid, atur lab otomatis
             if (labFromUrl && labsConfig.some(l => l.id === labFromUrl)) {
                 document.getElementById('labId').value = labFromUrl;
             }
@@ -324,9 +323,38 @@
             renderLabSelection();
             renderFilters();
             renderQRModal();
-            updateDashboard();
             lucide.createIcons();
         });
+
+        // --- MENGAMBIL DATA DARI CLOUD (SPREADSHEET) ---
+        async function fetchVisitorsFromCloud() {
+            const grid = document.getElementById('visitors-grid');
+            const emptyState = document.getElementById('empty-state');
+            const syncIcon = document.getElementById('sync-icon');
+            
+            // Tampilkan state Loading
+            if(syncIcon) syncIcon.classList.add('animate-spin');
+            grid.innerHTML = '<div class="col-span-full text-center py-20"><i data-lucide="loader-2" class="w-12 h-12 animate-spin text-indigo-500 mx-auto mb-4"></i><p class="text-slate-400 font-medium tracking-wide">Sinkronisasi dengan Google Sheets...</p></div>';
+            emptyState.classList.add('hidden-view');
+            grid.classList.remove('hidden-view');
+            lucide.createIcons();
+
+            try {
+                // Proses Tarik Data (GET Request ke GAS)
+                const response = await fetch(GAS_URL);
+                const data = await response.json();
+                
+                // Jika data berhasil ditarik, perbarui state visitors
+                if(data && Array.isArray(data)) {
+                    visitors = data;
+                }
+            } catch (error) {
+                console.error("Gagal sinkronisasi dari Google Sheets:", error);
+            } finally {
+                if(syncIcon) syncIcon.classList.remove('animate-spin');
+                updateDashboard(); // Render ulang grid dengan data terbaru
+            }
+        }
 
         // --- NAVIGASI ---
         function switchView(viewName) {
@@ -337,21 +365,21 @@
             const viewCheckIn = document.getElementById('view-check-in');
             const viewAdmin = document.getElementById('view-admin');
 
-            // Reset Styles
             btnCheckIn.className = "nav-btn px-5 py-2.5 rounded-xl text-sm font-semibold transition-all flex items-center gap-2 text-slate-400 hover:text-slate-200 hover:bg-slate-800 border border-transparent";
             btnAdmin.className = "nav-btn px-5 py-2.5 rounded-xl text-sm font-semibold transition-all flex items-center gap-2 text-slate-400 hover:text-slate-200 hover:bg-slate-800 border border-transparent";
             
             viewCheckIn.classList.add('hidden-view');
             viewAdmin.classList.add('hidden-view');
 
-            // Apply Active Styles
             if(viewName === 'check-in') {
                 btnCheckIn.className = "nav-btn px-5 py-2.5 rounded-xl text-sm font-semibold transition-all flex items-center gap-2 bg-indigo-600/20 text-indigo-400 shadow-[inset_0_1px_1px_rgba(255,255,255,0.1)] border border-indigo-500/30";
                 viewCheckIn.classList.remove('hidden-view');
             } else {
                 btnAdmin.className = "nav-btn px-5 py-2.5 rounded-xl text-sm font-semibold transition-all flex items-center gap-2 bg-indigo-600/20 text-indigo-400 shadow-[inset_0_1px_1px_rgba(255,255,255,0.1)] border border-indigo-500/30";
                 viewAdmin.classList.remove('hidden-view');
-                updateDashboard();
+                
+                // Ketika Admin membuka Dashboard, tarik otomatis data dari Spreadsheet
+                fetchVisitorsFromCloud();
             }
         }
 
@@ -372,7 +400,7 @@
                 btn.className = `${baseClasses} ${isSelected ? activeClasses : inactiveClasses}`;
                 btn.onclick = () => {
                     labInput.value = lab.id;
-                    renderLabSelection(); // Re-render to update UI
+                    renderLabSelection();
                 };
 
                 let bgGradientHTML = isSelected ? `<div class="absolute inset-0 bg-gradient-to-br ${lab.colorClass} opacity-10"></div>` : '';
@@ -390,7 +418,7 @@
             lucide.createIcons();
         }
 
-        // --- SUBMIT DATA (FETCH KE GAS) ---
+        // --- SUBMIT DATA (FETCH POST KE GAS) ---
         async function handleFormSubmit(event) {
             event.preventDefault();
             if(isSubmitting) return;
@@ -400,7 +428,6 @@
             const submitIcon = submitBtn.querySelector('.submit-icon');
             const submitText = submitBtn.querySelector('.submit-text');
 
-            // Set Loading State
             isSubmitting = true;
             submitBtn.classList.add('bg-slate-800', 'text-slate-500', 'cursor-not-allowed');
             submitBtn.classList.remove('bg-white', 'text-slate-900', 'hover:bg-slate-100');
@@ -409,7 +436,6 @@
             submitText.textContent = "MENYINKRONKAN DATA...";
             lucide.createIcons();
 
-            // Kumpulkan Data
             const payload = {
                 id: Date.now(),
                 name: form.name.value,
@@ -422,27 +448,18 @@
             };
 
             try {
-                // Kirim ke Google Apps Script
                 await fetch(GAS_URL, {
                     method: 'POST',
                     mode: 'no-cors',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload)
                 });
-
-                // Jika berhasil, tambahkan ke data lokal
-                payload.status = "Aktif";
-                visitors.unshift(payload);
                 showSuccessSequence();
 
             } catch (error) {
                 console.error("Gagal mengirim ke Cloud:", error);
-                // Fallback Simpan Lokal
-                payload.status = "Lokal Only";
-                visitors.unshift(payload);
                 showSuccessSequence();
             } finally {
-                // Reset Button State
                 isSubmitting = false;
                 submitBtn.classList.remove('bg-slate-800', 'text-slate-500', 'cursor-not-allowed');
                 submitBtn.classList.add('bg-white', 'text-slate-900', 'hover:bg-slate-100');
@@ -451,7 +468,6 @@
                 submitText.textContent = "KONFIRMASI AKSES";
                 lucide.createIcons();
                 
-                // Form di-reset tapi kembalikan lab yang sedang diakses dari URL jika ada
                 form.reset();
                 const urlParams = new URLSearchParams(window.location.search);
                 const labFromUrl = urlParams.get('lab');
@@ -467,7 +483,6 @@
             setTimeout(() => {
                 document.getElementById('success-message').classList.add('hidden-view');
                 document.getElementById('form-container').classList.remove('hidden-view');
-                switchView('admin');
             }, 3000);
         }
 
@@ -501,18 +516,15 @@
         }
 
         function updateDashboard() {
-            // Filter Data
             const filteredVisitors = visitors.filter(v => {
                 const matchesSearch = v.name.toLowerCase().includes(searchTerm) || v.class.toLowerCase().includes(searchTerm);
                 const matchesLab = activeLabFilter === 'Semua' || v.labId === activeLabFilter;
                 return matchesSearch && matchesLab;
             });
 
-            // Update Stats
             document.getElementById('stat-total').textContent = visitors.length;
-            document.getElementById('stat-active').textContent = visitors.filter(v => v.status === "Aktif").length;
+            document.getElementById('stat-active').textContent = visitors.length; // Semua diasumsikan aktif dari log baru
 
-            // Render Grid
             const grid = document.getElementById('visitors-grid');
             const emptyState = document.getElementById('empty-state');
             grid.innerHTML = '';
@@ -538,7 +550,7 @@
                                     <i data-lucide="${iconName}" class="w-3.5 h-3.5"></i> ${v.labId}
                                 </span>
                                 <span class="flex items-center gap-1.5 text-xs font-medium bg-emerald-500/10 text-emerald-400 px-2.5 py-1 rounded-md border border-emerald-500/20">
-                                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span> ${v.status}
+                                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span> Aktif
                                 </span>
                             </div>
                             
@@ -567,7 +579,6 @@
                     `;
                     grid.insertAdjacentHTML('beforeend', cardHTML);
                 });
-                // Re-initialize icons inside the new HTML
                 lucide.createIcons();
             }
         }
@@ -579,7 +590,6 @@
             
             if(show) {
                 modal.classList.remove('hidden-view');
-                // Trigger reflow for animation
                 void modal.offsetWidth;
                 modal.classList.remove('opacity-0');
                 modalContent.classList.remove('scale-95');
@@ -590,13 +600,13 @@
                 modalContent.classList.add('scale-95');
                 setTimeout(() => {
                     modal.classList.add('hidden-view');
-                }, 300); // Wait for transition
+                }, 300);
             }
         }
 
         function renderQRModal() {
             const container = document.getElementById('qr-container');
-            const baseUrl = window.location.href.split('?')[0]; // Ambil URL saat ini tanpa parameter
+            const baseUrl = window.location.href.split('?')[0];
             
             labsConfig.forEach(lab => {
                 const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(baseUrl + "?lab=" + lab.id)}`;
